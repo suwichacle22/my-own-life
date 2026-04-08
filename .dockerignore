@@ -1,0 +1,16 @@
+.git
+.gitignore
+.vscode
+.tanstack
+.output
+node_modules
+coverage
+dist
+.env
+.env.*
+Dockerfile*
+README.md
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*

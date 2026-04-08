@@ -14,6 +14,10 @@ export default defineSchema({
     createdAt: v.number(),
     date: v.string(),
     durationMinutes: v.number(),
+    endMinute: v.optional(v.number()),
+    endTime: v.optional(v.string()),
     note: v.optional(v.string()),
+    startMinute: v.optional(v.number()),
+    startTime: v.optional(v.string()),
   }).index('by_date', ['date']),
 })

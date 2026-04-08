@@ -6,12 +6,13 @@ import {
   createRootRouteWithContext,
 } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
+import '@fontsource-variable/inter'
 import Footer from '../components/Footer'
 import Header from '../components/Header'
 import ConvexProvider from '../integrations/convex/provider'
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
-import appCss from '../styles.css?url'
 import type { ReactNode } from 'react'
+import '../styles.css'
 
 interface MyRouterContext {
   queryClient: QueryClient
@@ -38,10 +39,6 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       },
     ],
     links: [
-      {
-        rel: 'stylesheet',
-        href: appCss,
-      },
       {
         rel: 'manifest',
         href: '/manifest.json',

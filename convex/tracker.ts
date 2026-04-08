@@ -5,6 +5,26 @@ function sortTotals<T extends { total: number }>(items: T[]) {
   return items.sort((left, right) => right.total - left.total)
 }
 
+function parseTimeString(value: string) {
+  if (!/^\d{2}:\d{2}$/.test(value)) {
+    throw new Error('Time must use HH:MM format.')
+  }
+
+  const [hours, minutes] = value.split(':').map(Number)
+  if (
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    throw new Error('Time must be a valid 24-hour value.')
+  }
+
+  return hours * 60 + minutes
+}
+
 export const getDailySnapshot = query({
   args: { date: v.string() },
   handler: async (ctx, args) => {
@@ -38,6 +58,22 @@ export const getDailySnapshot = query({
       )
     }
 
+    const sortedTimeEntries = [...timeEntries].sort((left, right) => {
+      if (left.startMinute !== undefined && right.startMinute !== undefined) {
+        return left.startMinute - right.startMinute
+      }
+
+      if (left.startMinute !== undefined) {
+        return -1
+      }
+
+      if (right.startMinute !== undefined) {
+        return 1
+      }
+
+      return left.createdAt - right.createdAt
+    })
+
     return {
       date: args.date,
       moneyBreakdown: sortTotals(
@@ -53,8 +89,8 @@ export const getDailySnapshot = query({
           total,
         })),
       ),
-      timeEntries,
-      totalMinutes: timeEntries.reduce(
+      timeEntries: sortedTimeEntries,
+      totalMinutes: sortedTimeEntries.reduce(
         (runningTotal, entry) => runningTotal + entry.durationMinutes,
         0,
       ),
@@ -70,13 +106,17 @@ export const addTimeEntry = mutation({
   args: {
     category: v.string(),
     date: v.string(),
-    durationMinutes: v.number(),
+    endTime: v.string(),
     note: v.optional(v.string()),
+    startTime: v.string(),
   },
   handler: async (ctx, args) => {
-    const durationMinutes = Math.round(args.durationMinutes)
+    const startMinute = parseTimeString(args.startTime)
+    const endMinute = parseTimeString(args.endTime)
+    const durationMinutes = endMinute - startMinute
+
     if (durationMinutes <= 0) {
-      throw new Error('Duration must be greater than zero.')
+      throw new Error('End time must be later than start time.')
     }
 
     return await ctx.db.insert('timeEntries', {
@@ -84,7 +124,11 @@ export const addTimeEntry = mutation({
       createdAt: Date.now(),
       date: args.date,
       durationMinutes,
+      endMinute,
+      endTime: args.endTime,
       note: args.note?.trim() || undefined,
+      startMinute,
+      startTime: args.startTime,
     })
   },
 })
