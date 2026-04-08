@@ -1,11 +1,14 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
 
-function sortTotals<T extends { total: number }>(items: T[]) {
-  return items.sort((left, right) => right.total - left.total)
-}
+const DEFAULT_ENTRY_CATEGORY = 'General'
+const FULL_DAY_MINUTES = 24 * 60
 
-function parseTimeString(value: string) {
+function parseTimeString(value: string, options?: { allowEndOfDay?: boolean }) {
+  if (options?.allowEndOfDay && value === '24:00') {
+    return FULL_DAY_MINUTES
+  }
+
   if (!/^\d{2}:\d{2}$/.test(value)) {
     throw new Error('Time must use HH:MM format.')
   }
@@ -25,6 +28,94 @@ function parseTimeString(value: string) {
   return hours * 60 + minutes
 }
 
+function trimOptionalString(value?: string) {
+  return value?.trim() || undefined
+}
+
+function formatMinuteRange(startMinute: number, endMinute: number) {
+  return { endMinute, startMinute }
+}
+
+function buildCoverageSummary(
+  entries: Array<{
+    endMinute?: number
+    startMinute?: number
+  }>,
+) {
+  const orderedEntries = entries
+    .filter(
+      (entry): entry is { endMinute: number; startMinute: number } =>
+        entry.startMinute !== undefined && entry.endMinute !== undefined,
+    )
+    .sort((left, right) => left.startMinute - right.startMinute)
+
+  const missingRanges: Array<{ endMinute: number; startMinute: number }> = []
+  const overlapRanges: Array<{ endMinute: number; startMinute: number }> = []
+
+  let cursor = 0
+  for (const entry of orderedEntries) {
+    if (entry.startMinute > cursor) {
+      missingRanges.push(formatMinuteRange(cursor, entry.startMinute))
+    }
+
+    if (entry.startMinute < cursor) {
+      const overlapEnd = Math.min(entry.endMinute, cursor)
+      if (overlapEnd > entry.startMinute) {
+        overlapRanges.push(
+          formatMinuteRange(entry.startMinute, overlapEnd),
+        )
+      }
+    }
+
+    cursor = Math.max(cursor, entry.endMinute)
+  }
+
+  if (cursor < FULL_DAY_MINUTES) {
+    missingRanges.push(formatMinuteRange(cursor, FULL_DAY_MINUTES))
+  }
+
+  return {
+    isComplete:
+      missingRanges.length === 0 &&
+      overlapRanges.length === 0 &&
+      cursor === FULL_DAY_MINUTES,
+    missingRanges,
+    overlapRanges,
+  }
+}
+
+async function ensureNoTimeOverlap(
+  ctx: { db: any },
+  args: {
+    date: string
+    endMinute: number
+    excludeId?: string
+    startMinute: number
+  },
+) {
+  const entries = await ctx.db
+    .query('timeEntries')
+    .withIndex('by_date', (query) => query.eq('date', args.date))
+    .collect()
+
+  for (const entry of entries) {
+    if (
+      entry._id === args.excludeId ||
+      entry.startMinute === undefined ||
+      entry.endMinute === undefined
+    ) {
+      continue
+    }
+
+    const overlaps =
+      args.startMinute < entry.endMinute && args.endMinute > entry.startMinute
+
+    if (overlaps) {
+      throw new Error('This time range overlaps with another entry.')
+    }
+  }
+}
+
 export const getDailySnapshot = query({
   args: { date: v.string() },
   handler: async (ctx, args) => {
@@ -40,23 +131,6 @@ export const getDailySnapshot = query({
         .order('desc')
         .collect(),
     ])
-
-    const timeTotals = new Map<string, number>()
-    const moneyTotals = new Map<string, number>()
-
-    for (const entry of timeEntries) {
-      timeTotals.set(
-        entry.category,
-        (timeTotals.get(entry.category) ?? 0) + entry.durationMinutes,
-      )
-    }
-
-    for (const entry of moneyEntries) {
-      moneyTotals.set(
-        entry.category,
-        (moneyTotals.get(entry.category) ?? 0) + entry.amount,
-      )
-    }
 
     const sortedTimeEntries = [...timeEntries].sort((left, right) => {
       if (left.startMinute !== undefined && right.startMinute !== undefined) {
@@ -74,21 +148,12 @@ export const getDailySnapshot = query({
       return left.createdAt - right.createdAt
     })
 
+    const coverage = buildCoverageSummary(sortedTimeEntries)
+
     return {
+      coverage,
       date: args.date,
-      moneyBreakdown: sortTotals(
-        Array.from(moneyTotals.entries()).map(([category, total]) => ({
-          category,
-          total,
-        })),
-      ),
       moneyEntries,
-      timeBreakdown: sortTotals(
-        Array.from(timeTotals.entries()).map(([category, total]) => ({
-          category,
-          total,
-        })),
-      ),
       timeEntries: sortedTimeEntries,
       totalMinutes: sortedTimeEntries.reduce(
         (runningTotal, entry) => runningTotal + entry.durationMinutes,
@@ -104,7 +169,6 @@ export const getDailySnapshot = query({
 
 export const addTimeEntry = mutation({
   args: {
-    category: v.string(),
     date: v.string(),
     endTime: v.string(),
     note: v.optional(v.string()),
@@ -112,21 +176,27 @@ export const addTimeEntry = mutation({
   },
   handler: async (ctx, args) => {
     const startMinute = parseTimeString(args.startTime)
-    const endMinute = parseTimeString(args.endTime)
+    const endMinute = parseTimeString(args.endTime, { allowEndOfDay: true })
     const durationMinutes = endMinute - startMinute
 
     if (durationMinutes <= 0) {
       throw new Error('End time must be later than start time.')
     }
 
+    await ensureNoTimeOverlap(ctx, {
+      date: args.date,
+      endMinute,
+      startMinute,
+    })
+
     return await ctx.db.insert('timeEntries', {
-      category: args.category.trim(),
+      category: DEFAULT_ENTRY_CATEGORY,
       createdAt: Date.now(),
       date: args.date,
       durationMinutes,
       endMinute,
       endTime: args.endTime,
-      note: args.note?.trim() || undefined,
+      note: trimOptionalString(args.note),
       startMinute,
       startTime: args.startTime,
     })
@@ -136,7 +206,6 @@ export const addTimeEntry = mutation({
 export const addMoneyEntry = mutation({
   args: {
     amount: v.number(),
-    category: v.string(),
     date: v.string(),
     note: v.optional(v.string()),
   },
@@ -148,10 +217,77 @@ export const addMoneyEntry = mutation({
 
     return await ctx.db.insert('moneyEntries', {
       amount,
-      category: args.category.trim(),
+      category: DEFAULT_ENTRY_CATEGORY,
       createdAt: Date.now(),
       date: args.date,
-      note: args.note?.trim() || undefined,
+      note: trimOptionalString(args.note),
+    })
+  },
+})
+
+export const updateTimeEntry = mutation({
+  args: {
+    endTime: v.string(),
+    id: v.id('timeEntries'),
+    note: v.optional(v.string()),
+    startTime: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existingEntry = await ctx.db.get(args.id)
+
+    if (!existingEntry) {
+      throw new Error('Time entry not found.')
+    }
+
+    const startMinute = parseTimeString(args.startTime)
+    const endMinute = parseTimeString(args.endTime, { allowEndOfDay: true })
+    const durationMinutes = endMinute - startMinute
+
+    if (durationMinutes <= 0) {
+      throw new Error('End time must be later than start time.')
+    }
+
+    await ensureNoTimeOverlap(ctx, {
+      date: existingEntry.date,
+      endMinute,
+      excludeId: args.id,
+      startMinute,
+    })
+
+    await ctx.db.patch(args.id, {
+      category: DEFAULT_ENTRY_CATEGORY,
+      durationMinutes,
+      endMinute,
+      endTime: args.endTime,
+      note: trimOptionalString(args.note),
+      startMinute,
+      startTime: args.startTime,
+    })
+  },
+})
+
+export const updateMoneyEntry = mutation({
+  args: {
+    amount: v.number(),
+    id: v.id('moneyEntries'),
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const existingEntry = await ctx.db.get(args.id)
+
+    if (!existingEntry) {
+      throw new Error('Money entry not found.')
+    }
+
+    const amount = Number(args.amount.toFixed(2))
+    if (amount <= 0) {
+      throw new Error('Amount must be greater than zero.')
+    }
+
+    await ctx.db.patch(args.id, {
+      amount,
+      category: DEFAULT_ENTRY_CATEGORY,
+      note: trimOptionalString(args.note),
     })
   },
 })
