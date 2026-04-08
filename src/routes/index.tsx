@@ -15,6 +15,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type RefObject,
   type ReactNode,
 } from 'react'
 import { Badge } from '@/components/ui/badge'
@@ -130,6 +131,20 @@ function formatLoggedTime(timestamp: number) {
   return timeFormatter.format(new Date(timestamp))
 }
 
+function openTimePicker(input: HTMLInputElement | null) {
+  if (!input) {
+    return
+  }
+
+  input.focus()
+
+  try {
+    ;(input as HTMLInputElement & { showPicker?: () => void }).showPicker?.()
+  } catch {
+    // Some browsers expose time inputs without supporting programmatic picker open.
+  }
+}
+
 function App() {
   const today = getTodayDateString()
   const [selectedDate, setSelectedDate] = useState(today)
@@ -157,6 +172,8 @@ function App() {
   const [removingKey, setRemovingKey] = useState<string | null>(null)
   const moneySectionRef = useRef<HTMLElement | null>(null)
   const moneyAmountInputRef = useRef<HTMLInputElement | null>(null)
+  const timeStartInputRef = useRef<HTMLInputElement | null>(null)
+  const timeEndInputRef = useRef<HTMLInputElement | null>(null)
 
   const isDateUpdating = deferredDate !== selectedDate
 
@@ -364,29 +381,21 @@ function App() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="block">
-                <Label htmlFor="time-start" className="mb-2 block">
-                  Start time
-                </Label>
-                <Input
-                  id="time-start"
-                  type="time"
-                  value={timeStart}
-                  onChange={(event) => setTimeStart(event.target.value)}
-                  autoFocus
-                />
-              </div>
-              <div className="block">
-                <Label htmlFor="time-end" className="mb-2 block">
-                  End time
-                </Label>
-                <Input
-                  id="time-end"
-                  type="time"
-                  value={timeEnd}
-                  onChange={(event) => setTimeEnd(event.target.value)}
-                />
-              </div>
+              <TimeField
+                id="time-start"
+                label="Start time"
+                value={timeStart}
+                onChange={setTimeStart}
+                inputRef={timeStartInputRef}
+                autoFocus
+              />
+              <TimeField
+                id="time-end"
+                label="End time"
+                value={timeEnd}
+                onChange={setTimeEnd}
+                inputRef={timeEndInputRef}
+              />
             </div>
 
             <div className="block">
@@ -657,6 +666,63 @@ function StatCard({
         {value}
       </p>
     </Card>
+  )
+}
+
+function TimeField({
+  autoFocus = false,
+  id,
+  inputRef,
+  label,
+  onChange,
+  value,
+}: {
+  autoFocus?: boolean
+  id: string
+  inputRef: RefObject<HTMLInputElement | null>
+  label: string
+  onChange: (value: string) => void
+  value: string
+}) {
+  return (
+    <div className="block">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <Label htmlFor={id} className="block">
+          {label}
+        </Label>
+        <span className="text-xs font-semibold tracking-[0.12em] text-[var(--kicker)] uppercase">
+          Pick or type
+        </span>
+      </div>
+
+      <div className="rounded-[22px] border border-[color-mix(in_oklab,var(--line)_88%,transparent_12%)] bg-[var(--surface-inset)] p-2 shadow-[0_1px_0_var(--inset-glint)_inset,0_14px_28px_rgba(4,12,16,0.12)] transition-[border-color,box-shadow] focus-within:border-[color-mix(in_oklab,var(--lagoon-deep)_52%,var(--line))] focus-within:ring-2 focus-within:ring-[color-mix(in_oklab,var(--lagoon)_30%,transparent)]">
+        <div className="flex items-center gap-2">
+          <Input
+            id={id}
+            ref={inputRef}
+            type="time"
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            onClick={(event) => openTimePicker(event.currentTarget)}
+            autoFocus={autoFocus}
+            className="h-10 border-0 bg-transparent px-2 py-2 text-sm shadow-none focus-visible:ring-0"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0 rounded-2xl border-[color-mix(in_oklab,var(--lagoon)_26%,var(--line))] bg-[color-mix(in_oklab,var(--lagoon)_14%,var(--surface-panel))] px-3 text-[var(--lagoon-deep)]"
+            onClick={() => openTimePicker(inputRef.current)}
+          >
+            <Clock3 size={16} />
+            Pick
+          </Button>
+        </div>
+        <p className="mb-0 mt-2 px-2 text-xs text-[var(--sea-ink-soft)]">
+          Click the field to open the time picker, or type a time like 09:00.
+        </p>
+      </div>
+    </div>
   )
 }
 
