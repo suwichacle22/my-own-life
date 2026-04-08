@@ -20,6 +20,7 @@ import {
 import {
   startTransition,
   useDeferredValue,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -79,6 +80,11 @@ type TimeTableRow = {
   note: string
   sortMinute: number
   timeRange: string
+}
+type TimeFormSuggestion = {
+  endTime: string
+  startTime: string
+  useEndOfDay: boolean
 }
 const FULL_DAY_MINUTES = 24 * 60
 
@@ -165,6 +171,96 @@ function formatCoverageMinute(minute: number) {
 
 function formatCoverageRange(range: CoverageRange) {
   return `${formatCoverageMinute(range.startMinute)} - ${formatCoverageMinute(range.endMinute)}`
+}
+
+function formatTimePanelSummary(
+  startTime: string,
+  endTime: string,
+  useEndOfDay: boolean,
+) {
+  const formattedStart = formatClockTime(startTime)
+  const formattedEnd = useEndOfDay ? '24:00' : formatClockTime(endTime)
+  return `${formattedStart} - ${formattedEnd}`
+}
+
+function parseTimeInput(value: string, options?: { allowEndOfDay?: boolean }) {
+  if (options?.allowEndOfDay && value === '24:00') {
+    return FULL_DAY_MINUTES
+  }
+
+  if (!/^\d{2}:\d{2}$/.test(value)) {
+    return null
+  }
+
+  const [hours, minutes] = value.split(':').map(Number)
+  if (
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return null
+  }
+
+  return hours * 60 + minutes
+}
+
+function getEndStateFromMinute(endMinute: number) {
+  if (endMinute >= FULL_DAY_MINUTES) {
+    return {
+      endTime: '23:59',
+      useEndOfDay: true,
+    }
+  }
+
+  return {
+    endTime: formatMinuteInput(endMinute),
+    useEndOfDay: false,
+  }
+}
+
+function createTimeFormSuggestion(
+  startMinute: number,
+  durationMinutes = 60,
+): TimeFormSuggestion {
+  const safeStartMinute = Math.max(0, Math.min(startMinute, FULL_DAY_MINUTES - 1))
+  const endState = getEndStateFromMinute(safeStartMinute + durationMinutes)
+
+  return {
+    endTime: endState.endTime,
+    startTime: formatMinuteInput(safeStartMinute),
+    useEndOfDay: endState.useEndOfDay,
+  }
+}
+
+function getSuggestedTimeForm(entries: TimeEntry[]) {
+  const latestEndMinute = entries.reduce((latest, entry) => {
+    if (entry.endMinute === undefined) {
+      return latest
+    }
+
+    return Math.max(latest, entry.endMinute)
+  }, -1)
+
+  if (latestEndMinute < 0 || latestEndMinute >= FULL_DAY_MINUTES) {
+    return createTimeFormSuggestion(9 * 60)
+  }
+
+  return createTimeFormSuggestion(latestEndMinute)
+}
+
+function getRoundedCurrentMinute() {
+  const now = new Date()
+  const roundedMinutes = Math.round(now.getMinutes() / 5) * 5
+  const roundedDate = new Date(now)
+  roundedDate.setMinutes(roundedMinutes, 0, 0)
+
+  return Math.min(
+    roundedDate.getHours() * 60 + roundedDate.getMinutes(),
+    FULL_DAY_MINUTES - 1,
+  )
 }
 
 function buildCoverageSummary(entries: TimeEntry[]): CoverageSummary {
@@ -286,6 +382,7 @@ function openTimePicker(input: HTMLInputElement | null) {
 function App() {
   const today = getTodayDateString()
   const [selectedDate, setSelectedDate] = useState(today)
+  const [showDatePicker, setShowDatePicker] = useState(false)
   const deferredDate = useDeferredValue(selectedDate)
   const dashboard = useQuery(api.tracker.getDailySnapshot, {
     date: deferredDate,
@@ -302,6 +399,7 @@ function App() {
   const [timeEnd, setTimeEnd] = useState('10:00')
   const [timeUseEndOfDay, setTimeUseEndOfDay] = useState(false)
   const [timeNote, setTimeNote] = useState('')
+  const [timeFormDirty, setTimeFormDirty] = useState(false)
   const [moneyAmount, setMoneyAmount] = useState('')
   const [moneyNote, setMoneyNote] = useState('')
   const [timeError, setTimeError] = useState<string | null>(null)
@@ -309,6 +407,7 @@ function App() {
   const [timeSubmitting, setTimeSubmitting] = useState(false)
   const [moneySubmitting, setMoneySubmitting] = useState(false)
   const [removingKey, setRemovingKey] = useState<string | null>(null)
+  const [isTimePanelOpen, setIsTimePanelOpen] = useState(true)
   const [editingTimeEntryId, setEditingTimeEntryId] =
     useState<Id<'timeEntries'> | null>(null)
   const moneySectionRef = useRef<HTMLElement | null>(null)
@@ -325,6 +424,89 @@ function App() {
         (dashboard as { coverage?: CoverageSummary }).coverage,
       )
     : null
+  const timePanelSummary = formatTimePanelSummary(
+    timeStart,
+    timeEnd,
+    timeUseEndOfDay,
+  )
+
+  function applyTimeSuggestion(suggestion: TimeFormSuggestion) {
+    setTimeStart(suggestion.startTime)
+    setTimeEnd(suggestion.endTime)
+    setTimeUseEndOfDay(suggestion.useEndOfDay)
+  }
+
+  function markTimeFormDirty() {
+    setTimeFormDirty(true)
+  }
+
+  function handleTimeStartChange(value: string) {
+    markTimeFormDirty()
+    setTimeStart(value)
+  }
+
+  function handleTimeEndChange(value: string) {
+    markTimeFormDirty()
+    setTimeEnd(value)
+  }
+
+  function handleTimeUseEndOfDayChange(value: boolean) {
+    markTimeFormDirty()
+    setTimeUseEndOfDay(value)
+  }
+
+  function handlePickSuggestedTime() {
+    if (!dashboard) {
+      return
+    }
+
+    applyTimeSuggestion(getSuggestedTimeForm(dashboard.timeEntries))
+    setTimeFormDirty(true)
+  }
+
+  function handleUseCurrentTime() {
+    applyTimeSuggestion(createTimeFormSuggestion(getRoundedCurrentMinute()))
+    setTimeFormDirty(true)
+  }
+
+  function handleUseDuration(durationMinutes: number) {
+    const startMinute = parseTimeInput(timeStart)
+    if (startMinute === null) {
+      return
+    }
+
+    const suggestion = createTimeFormSuggestion(startMinute, durationMinutes)
+    setTimeEnd(suggestion.endTime)
+    setTimeUseEndOfDay(suggestion.useEndOfDay)
+    setTimeFormDirty(true)
+  }
+
+  function handleDateSelection(nextDate: string) {
+    setShowDatePicker(nextDate !== today)
+    setTimeNote('')
+    setTimeFormDirty(false)
+    startTransition(() => {
+      setSelectedDate(nextDate)
+    })
+  }
+
+  useEffect(() => {
+    if (!dashboard || timeFormDirty) {
+      return
+    }
+
+    applyTimeSuggestion(getSuggestedTimeForm(dashboard.timeEntries))
+  }, [dashboard, timeFormDirty])
+
+  useEffect(() => {
+    if (!isTimePanelOpen) {
+      return
+    }
+
+    requestAnimationFrame(() => {
+      timeStartInputRef.current?.focus()
+    })
+  }, [isTimePanelOpen])
 
   async function handleAddTimeEntry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -338,16 +520,27 @@ function App() {
     setTimeSubmitting(true)
 
     try {
+      const submittedEndTime = timeUseEndOfDay ? '24:00' : timeEnd
       await addTimeEntry({
         date: selectedDate,
-        endTime: timeUseEndOfDay ? '24:00' : timeEnd,
+        endTime: submittedEndTime,
         note: timeNote.trim() || undefined,
         startTime: timeStart,
       })
-      setTimeStart('09:00')
-      setTimeEnd('10:00')
-      setTimeUseEndOfDay(false)
+      const submittedEndMinute = parseTimeInput(submittedEndTime, {
+        allowEndOfDay: true,
+      })
+      if (
+        submittedEndMinute !== null &&
+        submittedEndMinute < FULL_DAY_MINUTES
+      ) {
+        applyTimeSuggestion(createTimeFormSuggestion(submittedEndMinute))
+      } else {
+        applyTimeSuggestion(createTimeFormSuggestion(9 * 60))
+      }
+      setTimeFormDirty(false)
       setTimeNote('')
+      setIsTimePanelOpen(false)
       requestAnimationFrame(() => {
         moneySectionRef.current?.scrollIntoView({
           behavior: 'smooth',
@@ -452,9 +645,7 @@ function App() {
                 size="sm"
                 className="min-w-0 justify-center"
                 onClick={() => {
-                  startTransition(() => {
-                    setSelectedDate(shiftDate(selectedDate, -1))
-                  })
+                  handleDateSelection(shiftDate(selectedDate, -1))
                 }}
               >
                 <ArrowLeft size={16} />
@@ -466,9 +657,7 @@ function App() {
                 size="sm"
                 className="min-w-0 justify-center bg-[color-mix(in_oklab,var(--lagoon)_22%,var(--surface-panel))] text-[var(--lagoon-deep)]"
                 onClick={() => {
-                  startTransition(() => {
-                    setSelectedDate(today)
-                  })
+                  handleDateSelection(today)
                 }}
               >
                 Today
@@ -479,9 +668,7 @@ function App() {
                 size="sm"
                 className="min-w-0 justify-center"
                 onClick={() => {
-                  startTransition(() => {
-                    setSelectedDate(shiftDate(selectedDate, 1))
-                  })
+                  handleDateSelection(shiftDate(selectedDate, 1))
                 }}
               >
                 Next
@@ -489,24 +676,33 @@ function App() {
               </Button>
             </div>
 
-            <Label
-              htmlFor="tracker-date"
-              className="text-xs tracking-[0.18em] text-[var(--kicker)] uppercase"
-            >
-              Pick a day
-            </Label>
-            <Input
-              id="tracker-date"
-              type="date"
-              value={selectedDate}
-              onChange={(event) => {
-                const nextDate = event.target.value
-                startTransition(() => {
-                  setSelectedDate(nextDate)
-                })
-              }}
-              className="font-semibold"
-            />
+            <div className="flex items-center justify-between gap-3">
+              <Label
+                htmlFor="tracker-date"
+                className="text-xs tracking-[0.18em] text-[var(--kicker)] uppercase"
+              >
+                {selectedDate === today ? 'Today by default' : 'Selected day'}
+              </Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowDatePicker((current) => !current)}
+              >
+                {showDatePicker ? 'Hide date' : 'Pick another day'}
+              </Button>
+            </div>
+            {showDatePicker || selectedDate !== today ? (
+              <Input
+                id="tracker-date"
+                type="date"
+                value={selectedDate}
+                onChange={(event) => {
+                  handleDateSelection(event.target.value)
+                }}
+                className="font-semibold"
+              />
+            ) : null}
             <p className="m-0 min-h-6 text-sm text-[var(--sea-ink-soft)]">
               {isDateUpdating
                 ? 'Updating entries...'
@@ -516,69 +712,133 @@ function App() {
         </div>
       </section>
 
-      <section className="mt-6 grid gap-6 xl:grid-cols-2">
-        <Card className="rise-in bg-[var(--surface-panel-strong)] p-4 sm:p-6">
-          <div className="mb-5 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-3">
-              <div className="rounded-2xl bg-[rgba(79,184,178,0.14)] p-3 text-[var(--lagoon-deep)]">
-                <Clock3 size={20} />
+      <section className="mt-6">
+        <Card
+          className={cn(
+            'rise-in bg-[var(--surface-panel-strong)] p-4 sm:p-6',
+            isTimePanelOpen
+              ? 'sticky top-4 z-30 shadow-[0_18px_40px_rgba(6,15,18,0.22)]'
+              : 'sticky top-4 z-20',
+          )}
+        >
+          {isTimePanelOpen ? (
+            <>
+              <div className="mb-5 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-2xl bg-[rgba(79,184,178,0.14)] p-3 text-[var(--lagoon-deep)]">
+                    <Clock3 size={20} />
+                  </div>
+                  <div>
+                    <p className="island-kicker mb-1">Step 1</p>
+                    <h2 className="m-0 text-lg font-semibold text-[var(--sea-ink)]">
+                      Log a time range
+                    </h2>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <Badge>First</Badge>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsTimePanelOpen(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
               </div>
-              <div>
-                <p className="island-kicker mb-1">Step 1</p>
-                <h2 className="m-0 text-lg font-semibold text-[var(--sea-ink)]">
-                  Log a time range
-                </h2>
+
+              <form className="grid gap-4" onSubmit={handleAddTimeEntry}>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <TimeField
+                    id="time-start"
+                    label="Start time"
+                    value={timeStart}
+                    onChange={handleTimeStartChange}
+                    inputRef={timeStartInputRef}
+                    autoFocus
+                  />
+                  <EndTimeField
+                    id="time-end"
+                    label="End time"
+                    value={timeEnd}
+                    onChange={handleTimeEndChange}
+                    inputRef={timeEndInputRef}
+                    useEndOfDay={timeUseEndOfDay}
+                    onToggleUseEndOfDay={handleTimeUseEndOfDayChange}
+                  />
+                </div>
+
+                <TimeQuickActions
+                  onApplyDuration={handleUseDuration}
+                  onUseCurrentTime={handleUseCurrentTime}
+                  onUseSuggestedTime={handlePickSuggestedTime}
+                />
+
+                <div className="block">
+                  <Label htmlFor="time-note" className="mb-2 block">
+                    What did you do?
+                  </Label>
+                  <Textarea
+                    id="time-note"
+                    value={timeNote}
+                    onChange={(event) => {
+                      markTimeFormDirty()
+                      setTimeNote(event.target.value)
+                    }}
+                    className="resize-y"
+                    placeholder="Playing game"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="m-0 min-h-5 text-sm text-[var(--sea-ink-soft)]">
+                    {timeError ?? 'Example: 10:00 to 13:00 for playing game.'}
+                  </p>
+                  <Button
+                    type="submit"
+                    disabled={timeSubmitting}
+                    className="w-full sm:w-auto"
+                  >
+                    <Plus size={16} />
+                    {timeSubmitting ? 'Saving...' : 'Save time'}
+                  </Button>
+                </div>
+              </form>
+            </>
+          ) : (
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="rounded-2xl bg-[rgba(79,184,178,0.14)] p-3 text-[var(--lagoon-deep)]">
+                  <Clock3 size={20} />
+                </div>
+                <div>
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <p className="island-kicker m-0">Step 1</p>
+                    <Badge>First</Badge>
+                  </div>
+                  <h2 className="m-0 text-lg font-semibold text-[var(--sea-ink)]">
+                    Quick log time
+                  </h2>
+                  <p className="mt-1 text-sm text-[var(--sea-ink-soft)]">
+                    {selectedDate === today ? 'Today' : formatDayLabel(selectedDate)} •{' '}
+                    {timePanelSummary}
+                  </p>
+                </div>
               </div>
-            </div>
-            <Badge className="self-start sm:self-auto">First</Badge>
-          </div>
-
-          <form className="grid gap-4" onSubmit={handleAddTimeEntry}>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <TimeField
-                id="time-start"
-                label="Start time"
-                value={timeStart}
-                onChange={setTimeStart}
-                inputRef={timeStartInputRef}
-                autoFocus
-              />
-              <EndTimeField
-                id="time-end"
-                label="End time"
-                value={timeEnd}
-                onChange={setTimeEnd}
-                inputRef={timeEndInputRef}
-                useEndOfDay={timeUseEndOfDay}
-                onToggleUseEndOfDay={setTimeUseEndOfDay}
-              />
-            </div>
-
-            <div className="block">
-              <Label htmlFor="time-note" className="mb-2 block">
-                What did you do?
-              </Label>
-              <Textarea
-                id="time-note"
-                value={timeNote}
-                onChange={(event) => setTimeNote(event.target.value)}
-                className="resize-y"
-                placeholder="Playing game"
-              />
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="m-0 min-h-5 text-sm text-[var(--sea-ink-soft)]">
-                {timeError ?? 'Example: 10:00 to 13:00 for playing game.'}
-              </p>
-              <Button type="submit" disabled={timeSubmitting} className="w-full sm:w-auto">
-                <Plus size={16} />
-                {timeSubmitting ? 'Saving...' : 'Save time'}
+              <Button
+                type="button"
+                className="w-full sm:w-auto"
+                onClick={() => setIsTimePanelOpen(true)}
+              >
+                Open Step 1
               </Button>
             </div>
-          </form>
+          )}
         </Card>
+      </section>
 
+      <section className="mt-6">
         <Card
           ref={moneySectionRef}
           className="rise-in bg-[var(--surface-panel-strong)] p-4 sm:p-6"
@@ -925,6 +1185,97 @@ function EndTimeField({
   )
 }
 
+function TimeQuickActions({
+  compact = false,
+  onApplyDuration,
+  onUseCurrentTime,
+  onUseSuggestedTime,
+  showSuggested = true,
+  suggestedLabel = 'Next slot',
+}: {
+  compact?: boolean
+  onApplyDuration: (durationMinutes: number) => void
+  onUseCurrentTime: () => void
+  onUseSuggestedTime: () => void
+  showSuggested?: boolean
+  suggestedLabel?: string
+}) {
+  return (
+    <div className="grid gap-2">
+      <p className="m-0 text-xs font-semibold tracking-[0.14em] text-[var(--kicker)] uppercase">
+        Quick actions
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {showSuggested ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={cn(compact && 'shadow-none')}
+            onClick={onUseSuggestedTime}
+          >
+            {suggestedLabel}
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(compact && 'shadow-none')}
+          onClick={onUseCurrentTime}
+        >
+          Now
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(compact && 'shadow-none')}
+          onClick={() => onApplyDuration(5)}
+        >
+          +5m
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(compact && 'shadow-none')}
+          onClick={() => onApplyDuration(15)}
+        >
+          +15m
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(compact && 'shadow-none')}
+          onClick={() => onApplyDuration(30)}
+        >
+          +30m
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(compact && 'shadow-none')}
+          onClick={() => onApplyDuration(45)}
+        >
+          +45m
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(compact && 'shadow-none')}
+          onClick={() => onApplyDuration(60)}
+        >
+          +1h
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function DayCoverageNotice({ coverage }: { coverage: CoverageSummary }) {
   const hasIssues =
     coverage.missingRanges.length > 0 || coverage.overlapRanges.length > 0
@@ -1174,6 +1525,30 @@ function TimeEntryEditor({
     onCancel()
   }
 
+  function handleUseCurrentTime() {
+    const suggestion = createTimeFormSuggestion(getRoundedCurrentMinute())
+    setDraft((current) => ({
+      ...current,
+      endTime: suggestion.endTime,
+      startTime: suggestion.startTime,
+      useEndOfDay: suggestion.useEndOfDay,
+    }))
+  }
+
+  function handleUseDuration(durationMinutes: number) {
+    const startMinute = parseTimeInput(draft.startTime)
+    if (startMinute === null) {
+      return
+    }
+
+    const suggestion = createTimeFormSuggestion(startMinute, durationMinutes)
+    setDraft((current) => ({
+      ...current,
+      endTime: suggestion.endTime,
+      useEndOfDay: suggestion.useEndOfDay,
+    }))
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -1244,6 +1619,14 @@ function TimeEntryEditor({
             compact
           />
         </div>
+
+        <TimeQuickActions
+          compact
+          onApplyDuration={handleUseDuration}
+          onUseCurrentTime={handleUseCurrentTime}
+          onUseSuggestedTime={resetDraft}
+          suggestedLabel="Reset times"
+        />
 
         <div>
           <Label htmlFor={`time-note-${entry._id}`} className="mb-2 block">
