@@ -264,18 +264,19 @@ function App() {
   }
 
   return (
-    <main className="page-wrap px-4 pb-10 pt-6 sm:pt-8">
-      <section className="island-shell rise-in relative overflow-hidden rounded-[2rem] px-6 py-6 sm:px-8 sm:py-7">
+    <main className="page-wrap px-4 pb-10 pt-4 sm:pt-8">
+      <section className="island-shell rise-in relative overflow-hidden rounded-[2rem] px-4 py-4 sm:px-8 sm:py-7">
         <div className="pointer-events-none absolute -left-16 -top-16 h-44 w-44 rounded-full bg-[radial-gradient(circle,rgba(79,184,178,0.28),transparent_68%)]" />
         <div className="pointer-events-none absolute -bottom-20 right-0 h-52 w-52 rounded-full bg-[radial-gradient(circle,rgba(47,106,74,0.16),transparent_72%)]" />
 
         <div className="relative flex justify-end">
-          <Card className="w-full rounded-[1.6rem] border-[color-mix(in_oklab,var(--lagoon)_18%,var(--line))] bg-[linear-gradient(180deg,var(--surface-panel-strong),var(--surface-muted))] p-4 lg:max-w-[38rem]">
-            <div className="flex items-center justify-between gap-3">
+          <Card className="w-full rounded-[1.6rem] border-[color-mix(in_oklab,var(--lagoon)_18%,var(--line))] bg-[linear-gradient(180deg,var(--surface-panel-strong),var(--surface-muted))] p-3 sm:p-4 lg:max-w-[38rem]">
+            <div className="grid grid-cols-3 gap-2 sm:flex sm:items-center sm:justify-between">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
+                className="min-w-0 justify-center"
                 onClick={() => {
                   startTransition(() => {
                     setSelectedDate(shiftDate(selectedDate, -1))
@@ -289,7 +290,7 @@ function App() {
                 type="button"
                 variant="outline"
                 size="sm"
-                className="bg-[color-mix(in_oklab,var(--lagoon)_22%,var(--surface-panel))] text-[var(--lagoon-deep)]"
+                className="min-w-0 justify-center bg-[color-mix(in_oklab,var(--lagoon)_22%,var(--surface-panel))] text-[var(--lagoon-deep)]"
                 onClick={() => {
                   startTransition(() => {
                     setSelectedDate(today)
@@ -302,6 +303,7 @@ function App() {
                 type="button"
                 variant="outline"
                 size="sm"
+                className="min-w-0 justify-center"
                 onClick={() => {
                   startTransition(() => {
                     setSelectedDate(shiftDate(selectedDate, 1))
@@ -341,8 +343,8 @@ function App() {
       </section>
 
       <section className="mt-6 grid gap-6 xl:grid-cols-2">
-        <Card className="rise-in bg-[linear-gradient(180deg,var(--surface-panel-strong),var(--surface-panel))] p-5 sm:p-6">
-          <div className="mb-5 flex items-center justify-between gap-3">
+        <Card className="rise-in bg-[linear-gradient(180deg,var(--surface-panel-strong),var(--surface-panel))] p-4 sm:p-6">
+          <div className="mb-5 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
             <div className="flex items-center gap-3">
               <div className="rounded-2xl bg-[rgba(79,184,178,0.14)] p-3 text-[var(--lagoon-deep)]">
                 <Clock3 size={20} />
@@ -354,7 +356,7 @@ function App() {
                 </h2>
               </div>
             </div>
-            <Badge>First</Badge>
+            <Badge className="self-start sm:self-auto">First</Badge>
           </div>
 
           <form className="grid gap-4" onSubmit={handleAddTimeEntry}>
@@ -411,11 +413,11 @@ function App() {
               />
             </div>
 
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="m-0 min-h-5 text-sm text-[var(--sea-ink-soft)]">
                 {timeError ?? 'Example: 10:00 to 13:00 for playing game.'}
               </p>
-              <Button type="submit" disabled={timeSubmitting}>
+              <Button type="submit" disabled={timeSubmitting} className="w-full sm:w-auto">
                 <Plus size={16} />
                 {timeSubmitting ? 'Saving...' : 'Save time'}
               </Button>
@@ -425,9 +427,9 @@ function App() {
 
         <Card
           ref={moneySectionRef}
-          className="rise-in bg-[linear-gradient(180deg,var(--surface-panel-strong),var(--surface-panel))] p-5 sm:p-6"
+          className="rise-in bg-[linear-gradient(180deg,var(--surface-panel-strong),var(--surface-panel))] p-4 sm:p-6"
         >
-          <div className="mb-5 flex items-center justify-between gap-3">
+          <div className="mb-5 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
             <div className="flex items-center gap-3">
               <div className="rounded-2xl bg-[rgba(47,106,74,0.14)] p-3 text-[var(--palm)]">
                 <Coins size={20} />
@@ -439,7 +441,9 @@ function App() {
                 </h2>
               </div>
             </div>
-            <Badge variant="secondary">Second</Badge>
+            <Badge variant="secondary" className="self-start sm:self-auto">
+              Second
+            </Badge>
           </div>
 
           <form className="grid gap-4" onSubmit={handleAddMoneyEntry}>
@@ -495,14 +499,14 @@ function App() {
               />
             </div>
 
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="m-0 min-h-5 text-sm text-[var(--sea-ink-soft)]">
                 {moneyError ?? 'Add the amount after you finish logging the time block.'}
               </p>
               <Button
                 type="submit"
                 disabled={moneySubmitting}
-                className="bg-[linear-gradient(90deg,var(--palm),#55b482)] shadow-[0_16px_32px_rgba(47,106,74,0.22)]"
+                className="w-full bg-[linear-gradient(90deg,var(--palm),#55b482)] shadow-[0_16px_32px_rgba(47,106,74,0.22)] sm:w-auto"
               >
                 <Plus size={16} />
                 {moneySubmitting ? 'Saving...' : 'Save money'}
@@ -536,15 +540,15 @@ function App() {
       </section>
 
       <section className="mt-8 grid gap-6">
-        <Card className="rise-in bg-[linear-gradient(180deg,var(--surface-panel-strong),var(--surface-panel))] p-5 sm:p-6">
-          <div className="mb-5 flex items-start justify-between gap-4">
+        <Card className="rise-in bg-[linear-gradient(180deg,var(--surface-panel-strong),var(--surface-panel))] p-4 sm:p-6">
+          <div className="mb-5 flex flex-col items-start justify-between gap-3 sm:flex-row sm:gap-4">
             <div>
               <p className="island-kicker mb-1">Breakdown</p>
               <h2 className="m-0 text-lg font-semibold text-[var(--sea-ink)]">
                 Where the day went
               </h2>
             </div>
-            <Badge variant="outline" className="m-0">
+            <Badge variant="outline" className="m-0 self-start sm:self-auto">
               {dashboard
                 ? `${dashboard.timeEntries.length + dashboard.moneyEntries.length} entries`
                 : 'Loading'}
@@ -578,7 +582,7 @@ function App() {
         </Card>
 
         <section className="grid gap-6 lg:grid-cols-2">
-          <Card className="rise-in bg-[linear-gradient(180deg,var(--surface-panel-strong),var(--surface-panel))] p-5 sm:p-6">
+          <Card className="rise-in bg-[linear-gradient(180deg,var(--surface-panel-strong),var(--surface-panel))] p-4 sm:p-6">
             <div className="mb-5 flex items-center gap-3">
               <div className="rounded-2xl bg-[rgba(79,184,178,0.14)] p-3 text-[var(--lagoon-deep)]">
                 <Clock3 size={20} />
@@ -607,7 +611,7 @@ function App() {
               </div>
           </Card>
 
-          <Card className="rise-in bg-[linear-gradient(180deg,var(--surface-panel-strong),var(--surface-panel))] p-5 sm:p-6">
+          <Card className="rise-in bg-[linear-gradient(180deg,var(--surface-panel-strong),var(--surface-panel))] p-4 sm:p-6">
             <div className="mb-5 flex items-center gap-3">
               <div className="rounded-2xl bg-[rgba(47,106,74,0.14)] p-3 text-[var(--palm)]">
                 <Coins size={20} />
@@ -662,7 +666,7 @@ function StatCard({
       <p className="mb-2 text-xs font-semibold tracking-[0.18em] text-[var(--kicker)] uppercase">
         {label}
       </p>
-      <p className="m-0 text-2xl font-semibold tracking-tight text-[var(--sea-ink)]">
+      <p className="m-0 text-xl font-semibold tracking-tight text-[var(--sea-ink)] sm:text-2xl">
         {value}
       </p>
     </Card>
@@ -690,13 +694,13 @@ function TimeField({
         <Label htmlFor={id} className="block">
           {label}
         </Label>
-        <span className="text-xs font-semibold tracking-[0.12em] text-[var(--kicker)] uppercase">
+        <span className="hidden text-xs font-semibold tracking-[0.12em] text-[var(--kicker)] uppercase sm:inline">
           Pick or type
         </span>
       </div>
 
-      <div className="rounded-[22px] border border-[color-mix(in_oklab,var(--line)_88%,transparent_12%)] bg-[var(--surface-inset)] p-2 shadow-[0_1px_0_var(--inset-glint)_inset,0_14px_28px_rgba(4,12,16,0.12)] transition-[border-color,box-shadow] focus-within:border-[color-mix(in_oklab,var(--lagoon-deep)_52%,var(--line))] focus-within:ring-2 focus-within:ring-[color-mix(in_oklab,var(--lagoon)_30%,transparent)]">
-        <div className="flex items-center gap-2">
+      <div className="rounded-[20px] border border-[color-mix(in_oklab,var(--line)_88%,transparent_12%)] bg-[var(--surface-inset)] p-1.5 shadow-[0_1px_0_var(--inset-glint)_inset,0_14px_28px_rgba(4,12,16,0.12)] transition-[border-color,box-shadow] focus-within:border-[color-mix(in_oklab,var(--lagoon-deep)_52%,var(--line))] focus-within:ring-2 focus-within:ring-[color-mix(in_oklab,var(--lagoon)_30%,transparent)] sm:p-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Input
             id={id}
             ref={inputRef}
@@ -705,20 +709,20 @@ function TimeField({
             onChange={(event) => onChange(event.target.value)}
             onClick={(event) => openTimePicker(event.currentTarget)}
             autoFocus={autoFocus}
-            className="h-10 border-0 bg-transparent px-2 py-2 text-sm shadow-none focus-visible:ring-0"
+            className="h-10 w-full border-0 bg-transparent px-2 py-2 text-sm shadow-none focus-visible:ring-0"
           />
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="shrink-0 rounded-2xl border-[color-mix(in_oklab,var(--lagoon)_26%,var(--line))] bg-[color-mix(in_oklab,var(--lagoon)_14%,var(--surface-panel))] px-3 text-[var(--lagoon-deep)]"
+            className="hidden shrink-0 rounded-2xl border-[color-mix(in_oklab,var(--lagoon)_26%,var(--line))] bg-[color-mix(in_oklab,var(--lagoon)_14%,var(--surface-panel))] px-3 text-[var(--lagoon-deep)] sm:inline-flex"
             onClick={() => openTimePicker(inputRef.current)}
           >
             <Clock3 size={16} />
             Pick
           </Button>
         </div>
-        <p className="mb-0 mt-2 px-2 text-xs text-[var(--sea-ink-soft)]">
+        <p className="mb-0 mt-2 hidden px-2 text-xs text-[var(--sea-ink-soft)] sm:block">
           Click the field to open the time picker, or type a time like 09:00.
         </p>
       </div>
