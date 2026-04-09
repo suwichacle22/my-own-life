@@ -1352,7 +1352,7 @@ function TimeEntriesTable({
       {
         accessorKey: 'date',
         cell: ({ row }) => (
-          <span className="font-medium text-[var(--sea-ink)]">
+          <span className="whitespace-nowrap font-medium text-[var(--sea-ink)]">
             {row.original.date}
           </span>
         ),
@@ -1361,11 +1361,11 @@ function TimeEntriesTable({
       {
         accessorKey: 'timeRange',
         cell: ({ row }) => (
-          <div>
-            <p className="m-0 font-semibold text-[var(--sea-ink)]">
+          <div className="min-w-[13rem]">
+            <p className="m-0 whitespace-nowrap font-semibold text-[var(--sea-ink)]">
               {row.original.timeRange}
             </p>
-            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--kicker)]">
+            <p className="mt-1 whitespace-nowrap text-xs font-semibold uppercase tracking-[0.14em] text-[var(--kicker)]">
               {formatDuration(row.original.entry.durationMinutes)}
             </p>
           </div>
@@ -1397,7 +1397,7 @@ function TimeEntriesTable({
       {
         accessorKey: 'note',
         cell: ({ row }) => (
-          <span className="max-w-[22rem] whitespace-normal text-[var(--sea-ink-soft)]">
+          <span className="block min-w-[14rem] max-w-[18rem] whitespace-normal break-words text-[var(--sea-ink-soft)]">
             {row.original.note}
           </span>
         ),
@@ -1405,7 +1405,7 @@ function TimeEntriesTable({
       },
       {
         cell: ({ row }) => (
-          <div className="flex justify-end gap-2">
+          <div className="flex min-w-[9rem] justify-end gap-2">
             <Button
               type="button"
               variant="outline"
@@ -1448,14 +1448,20 @@ function TimeEntriesTable({
 
   return (
     <div className="overflow-hidden rounded-[1.4rem] border border-[var(--line)] bg-[var(--surface-inset)]">
-      <Table>
+      <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
+      <Table className="min-w-[46rem]">
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id} className="hover:bg-transparent">
               {headerGroup.headers.map((header) => (
                 <TableHead
                   key={header.id}
-                  className={header.id === 'actions' ? 'text-right' : undefined}
+                  className={cn(
+                    header.id === 'actions' && 'w-[9rem] text-right',
+                    header.id === 'date' && 'w-[9rem]',
+                    header.id === 'note' && 'w-[18rem]',
+                    header.id === 'timeRange' && 'w-[14rem]',
+                  )}
                 >
                   {header.isPlaceholder
                     ? null
@@ -1480,7 +1486,12 @@ function TimeEntriesTable({
               {row.getVisibleCells().map((cell) => (
                 <TableCell
                   key={cell.id}
-                  className={cell.column.id === 'actions' ? 'w-28 text-right' : undefined}
+                  className={cn(
+                    cell.column.id === 'actions' && 'w-[9rem] text-right',
+                    cell.column.id === 'date' && 'w-[9rem]',
+                    cell.column.id === 'note' && 'w-[18rem]',
+                    cell.column.id === 'timeRange' && 'w-[14rem]',
+                  )}
                 >
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </TableCell>
@@ -1489,6 +1500,7 @@ function TimeEntriesTable({
           ))}
         </TableBody>
       </Table>
+      </div>
     </div>
   )
 }
